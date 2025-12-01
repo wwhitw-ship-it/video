@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ScriptFlow - Hair Stylist Edition</title>
+    
+    <!-- 1. 引入 Tailwind CSS (樣式引擎) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- 2. 引入 html2canvas (圖片下載功能) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- 3. 引入 Babel (讓瀏覽器看得懂 JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- 4. 設定 React 環境 -->
+    <script type="importmap">
+    {
+        "imports": {
+            "react": "https://esm.sh/react@18.2.0",
+            "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+            "lucide-react": "https://esm.sh/lucide-react@0.344.0"
+        }
+    }
+    </script>
+
+    <!-- 針對列印的樣式修正 -->
+    <style>
+        @media print {
+            @page { size: landscape; margin: 0; }
+            body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .print\:hidden { display: none !important; }
+            .no-print { display: none !important; }
+        }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 避免截圖時背景透明 */
+        .capture-target { background-color: white; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800">
+    
+    <!-- React 渲染的根節點 -->
+    <div id="root"></div>
+
+    <!-- 5. 主要應用程式邏輯 (注意這裡加上了 type="text/babel" 和 data-type="module") -->
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useRef } from 'react';
+        import { createRoot } from 'react-dom/client';
+        import { 
+            Printer, RefreshCcw, Sparkles, Scissors, Settings, Key, AlertCircle, 
+            Plus, Trash2, User, Save, FolderOpen, X, Lightbulb, Check, FileText, 
+            Copy, Layout, Download, Image as ImageIcon 
+        } from 'lucide-react';
+
+        // -----------------------------------------------------------------------------
+        // 常數定義
+        // -----------------------------------------------------------------------------
+        const STORAGE_KEY = 'hair_scripts_v2_multi'; 
+
+        const COMMON_SERVICES = [
+            "專業剪髮 (Cut)", "韓系燙髮 (Perm)", "縮毛矯正 (Rebonding)", 
+            "質感單色染 (Color)", "歐美手刷染 (Balayage)", "光線染/耳圈染 (Highlight)", 
+            "深層結構護髮 (Treatment)", "頭皮檢測護理 (Scalp)", 
+            "男士油頭/造型 (Barber)", "婚禮/活動造型 (Styling)"
+        ];
+
+        const COMMON_AUDIENCES = [
+            "追求質感的上班族", "預算有限的學生族群", "細軟扁塌髮困擾者", 
+            "自然捲/毛躁髮困擾者", "極度受損髮/漂髮客群", "產後落髮/頭皮敏感者", 
+            "白髮遮蓋/熟齡客群", "注重門面的商務男士", "韓系風格愛好者", 
+            "特殊色/歐美挑染控", "忙碌沒空打理的媽媽", "短髮控/想剪短的女生"
+        ];
+
+        const COMMON_STYLES = [
+            "質感氛圍 (Aesthetic)", "專業教學 (Tutorial)", "日常紀錄 (Vlog)", 
+            "幽默短劇 (Funny)", "改造前後 (Before/After)", "ASMR/療癒過程", 
+            "避雷/迷思破解", "快速問答 (Q&A)"
+        ];
+
+        // -----------------------------------------------------------------------------
+        // 模擬 AI 邏輯
+        // -----------------------------------------------------------------------------
+        const generateMockData = (topic) => {
+            return {
+                concept: `這是一支以「${topic || '未命名'}」為主題的短片，透過設計師親自示範，展現專業與親切感。`,
+                script: [
+                    { id: 1, section: "起", sectionEn: "Hook", visual: "設計師對著鏡頭做出『母湯』的手勢。", dialogue: "你是那種洗完頭直接包著毛巾一小時的人嗎？" },
+                    { id: 2, section: "承", sectionEn: "Info", visual: "快速示範錯誤 vs 正確的吹整手勢。", dialogue: "這樣包只會讓頭皮悶住發臭，髮根還會塌到貼頭皮。" },
+                    { id: 3, section: "轉", sectionEn: "Value", visual: "展示吹乾後的蓬鬆髮根特寫。", dialogue: "其實只要洗完立刻逆向吹乾，蓬鬆度直接撐一整天。" },
+                    { id: 4, section: "合", sectionEn: "CTA", visual: "設計師笑著指下方資訊欄。", dialogue: "想知道你的髮質適合哪種護髮？留言『想知道』告訴你！" }
+                ]
+            };
+        };
+
+        const generateMockTopics = (audience) => [
+            `3分鐘快速出門造型`, `顯白髮色推薦 Top3`, `不用燙的蓬鬆技巧`
+        ];
+
+        // -----------------------------------------------------------------------------
+        // API 呼叫邏輯
+        // -----------------------------------------------------------------------------
+        const callGeminiAPI = async (apiKey, formData) => {
+            const prompt = `
+                你是一個幽默、親切且專業的美髮設計師短影音企劃。主角是設計師本人。
+                請根據以下資訊生成腳本：
+                - 主題：${formData.topic}
+                - 產品/服務：${formData.product || '無特定'} 
+                - 風格：${formData.style} 
+                - 受眾：${formData.audience}
+                - 補充重點：${formData.notes || '無'} 
+                - 時長：${formData.duration}
+
+                【任務要求】
+                1. **影片概念簡述 (Concept)**：請用一句話說明這支影片的主旨。
+                2. **大綱重點 (Outline)**：不要複雜的運鏡，只要寫「畫面重點」或「動作指示」，簡潔有力。
+                3. **參考語句 (Dialogue)**：設計師的口語台詞，重點就好，控制在 2-3 句以內。
+
+                請回傳純 JSON 物件 (Object)，格式如下：
+                {
+                "concept": "影片概念簡述...",
+                "script": [
+                    { "section": "起", "visual": "簡潔的畫面重點", "dialogue": "口語參考台詞" },
+                    { "section": "承", "visual": "簡潔的畫面重點", "dialogue": "口語參考台詞" },
+                    ...
+                ]
+                }
+            `;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                let text = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const parsed = JSON.parse(text);
+                
+                const sectionMap = { "起": "Hook", "開場": "Hook", "承": "Info", "過程": "Process", "轉": "Value", "亮點": "Highlight", "合": "CTA", "結尾": "Ending" };
+
+                const scriptWithIds = parsed.script.map((item, index) => ({ 
+                    ...item, 
+                    id: Date.now() + index, 
+                    sectionEn: sectionMap[item.section[0]] || "Part " + (index + 1)
+                }));
+
+                return { concept: parsed.concept || "無概念描述", script: scriptWithIds };
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                throw error;
+            }
+        };
+
+        const callGeminiTopicsAPI = async (apiKey, formData) => {
+            const prompt = `
+                你是一個美髮社群小編。請根據以下條件提供 3 個吸睛的 IG Reels 短影音主題標題：
+                - 產品/服務：${formData.product || '一般剪燙染'}
+                - 目標受眾：${formData.audience}
+                - 補充重點：${formData.notes || '無'}
+                - 風格：${formData.style}
+                **重要：標題必須非常精簡、短促有力（10個字以內），像 IG Reels 的封面標題那樣。**
+                請直接回傳一個純 JSON 字串陣列，例如：["顯白髮色Top3", "3分鐘快速出門"]
+            `;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                const data = await response.json();
+                if (data.error) throw new Error(data.error.message);
+                let text = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+                return JSON.parse(text);
+            } catch (error) {
+                console.error("Gemini Topics API Error:", error);
+                throw error;
+            }
+        };
+
+        // -----------------------------------------------------------------------------
+        // React App Component
+        // -----------------------------------------------------------------------------
+        function App() {
+            const [clients, setClients] = useState([]);
+            const [selectedClientId, setSelectedClientId] = useState(null);
+            const [selectedScriptId, setSelectedScriptId] = useState(null);
+            
+            const [isAddingClient, setIsAddingClient] = useState(false);
+            const [newClientName, setNewClientName] = useState("");
+            
+            const [isGenerating, setIsGenerating] = useState(false);
+            const [isGeneratingTopics, setIsGeneratingTopics] = useState(false);
+            const [suggestedTopics, setSuggestedTopics] = useState([]);
+            
+            const [apiKey, setApiKey] = useState('');
+            const [showSettings, setShowSettings] = useState(false);
+            const [apiError, setApiError] = useState(null);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+            const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+            
+            const scriptRef = useRef(null);
+
+            // 初始化
+            useEffect(() => {
+                const savedApiKey = localStorage.getItem('gemini_api_key');
+                if (savedApiKey) setApiKey(savedApiKey);
+
+                const savedClients = localStorage.getItem(STORAGE_KEY);
+                if (savedClients) {
+                    const parsedClients = JSON.parse(savedClients);
+                    setClients(parsedClients);
+                    if (parsedClients.length > 0) {
+                        setSelectedClientId(parsedClients[0].id);
+                        if (parsedClients[0].scripts && parsedClients[0].scripts.length > 0) {
+                            setSelectedScriptId(parsedClients[0].scripts[0].id);
+                        }
+                    }
+                } else {
+                    const newClient = createNewClient("預設客戶");
+                    setClients([newClient]);
+                    setSelectedClientId(newClient.id);
+                    setSelectedScriptId(newClient.scripts[0].id);
+                }
+            }, []);
+
+            useEffect(() => {
+                if (selectedClientId) {
+                    const client = clients.find(c => c.id === selectedClientId);
+                    if (client && client.scripts.length > 0) {
+                        const currentScriptExists = client.scripts.some(s => s.id === selectedScriptId);
+                        if (!currentScriptExists) {
+                            setSelectedScriptId(client.scripts[0].id);
+                        }
+                    }
+                    setSuggestedTopics([]);
+                }
+            }, [selectedClientId, clients]);
+
+            useEffect(() => {
+                if (clients.length > 0) {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(clients));
+                }
+            }, [clients]);
+
+            const createNewScript = () => {
+                const mock = generateMockData('新腳本');
+                return {
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+                    createdAt: Date.now(),
+                    scriptConcept: mock.concept,
+                    formData: {
+                        topic: '', product: '', style: '質感氛圍 (Aesthetic)', duration: '30s', audience: '追求質感的上班族', notes: ''
+                    },
+                    scriptData: mock.script
+                };
+            };
+
+            const createNewClient = (name) => ({
+                id: Date.now().toString(),
+                name: name,
+                scripts: [createNewScript()]
+            });
+
+            // Handlers
+            const handleStartAddClient = () => { setIsAddingClient(true); setNewClientName(""); };
+            const handleCancelAddClient = () => { setIsAddingClient(false); setNewClientName(""); };
+            const handleConfirmAddClient = () => {
+                if (newClientName.trim()) {
+                    const newClient = createNewClient(newClientName.trim());
+                    setClients(prev => [newClient, ...prev]);
+                    setSelectedClientId(newClient.id);
+                    setSelectedScriptId(newClient.scripts[0].id);
+                    setIsAddingClient(false);
+                    setNewClientName("");
+                }
+            };
+
+            const handleDeleteClient = (e, id) => {
+                e.stopPropagation();
+                if (window.confirm("確定要刪除這位客戶以及他的所有腳本嗎？")) {
+                    const newClients = clients.filter(c => c.id !== id);
+                    setClients(newClients);
+                    if (newClients.length > 0) {
+                        setSelectedClientId(newClients[0].id);
+                        setSelectedScriptId(newClients[0].scripts[0]?.id);
+                    } else {
+                        const defaultClient = createNewClient("新客戶");
+                        setClients([defaultClient]);
+                        setSelectedClientId(defaultClient.id);
+                        setSelectedScriptId(defaultClient.scripts[0].id);
+                    }
+                }
+            };
+
+            const handleAddScript = () => {
+                setClients(prev => prev.map(c => {
+                    if (c.id === selectedClientId) {
+                        return { ...c, scripts: [...c.scripts, createNewScript()] };
+                    }
+                    return c;
+                }));
+            };
+
+            const handleDeleteScript = (e, scriptId) => {
+                e.stopPropagation();
+                if (window.confirm("確定要刪除這支腳本嗎？")) {
+                    setClients(prev => prev.map(c => {
+                        if (c.id === selectedClientId) {
+                            const newScripts = c.scripts.filter(s => s.id !== scriptId);
+                            if (newScripts.length === 0) newScripts.push(createNewScript());
+                            return { ...c, scripts: newScripts };
+                        }
+                        return c;
+                    }));
+                }
+            };
+
+            const handleSwitchScript = (scriptId) => setSelectedScriptId(scriptId);
+            const handleSaveKey = (e) => { setApiKey(e.target.value); localStorage.setItem('gemini_api_key', e.target.value); };
+
+            const updateCurrentScriptData = (field, value) => {
+                setClients(prev => prev.map(c => {
+                    if (c.id === selectedClientId) {
+                        const updatedScripts = c.scripts.map(s => {
+                            if (s.id === selectedScriptId) return { ...s, formData: { ...s.formData, [field]: value } };
+                            return s;
+                        });
+                        return { ...c, scripts: updatedScripts };
+                    }
+                    return c;
+                }));
+            };
+
+            const updateCurrentScriptConcept = (value) => {
+                setClients(prev => prev.map(c => {
+                    if (c.id === selectedClientId) {
+                        const updatedScripts = c.scripts.map(s => {
+                            if (s.id === selectedScriptId) return { ...s, scriptConcept: value };
+                            return s;
+                        });
+                        return { ...c, scripts: updatedScripts };
+                    }
+                    return c;
+                }));
+            };
+
+            const handleSelectTopic = (topic) => updateCurrentScriptData('topic', topic);
+
+            const updateCurrentScriptContent = (rowId, field, value) => {
+                setClients(prev => prev.map(c => {
+                    if (c.id === selectedClientId) {
+                        const updatedScripts = c.scripts.map(s => {
+                            if (s.id === selectedScriptId) {
+                                const newContent = s.scriptData.map(row => 
+                                    row.id === rowId ? { ...row, [field]: value } : row
+                                );
+                                return { ...s, scriptData: newContent };
+                            }
+                            return s;
+                        });
+                        return { ...c, scripts: updatedScripts };
+                    }
+                    return c;
+                }));
+            };
+
+            const handleDeleteRow = (rowId) => {
+                setClients(prev => prev.map(c => {
+                    if (c.id === selectedClientId) {
+                        const updatedScripts = c.scripts.map(s => {
+                            if (s.id === selectedScriptId) {
+                                return { ...s, scriptData: s.scriptData.filter(r => r.id !== rowId) };
+                            }
+                            return s;
+                        });
+                        return { ...c, scripts: updatedScripts };
+                    }
+                    return c;
+                }));
+            };
+
+            const handlePrint = () => { window.focus(); setTimeout(() => window.print(), 100); };
+
+            const handleDownloadText = () => {
+                const activeScript = getActiveData();
+                if (!activeScript) return;
+                const { formData, scriptData, scriptConcept } = activeScript;
+                let content = `# 腳本企劃：${formData.topic || '未命名'}\n\n## 核心概念\n${scriptConcept || '無'}\n\n## 腳本\n`;
+                scriptData.forEach(row => {
+                    content += `[${row.section}]\n大綱：${row.visual}\n台詞：${row.dialogue}\n---\n`;
+                });
+                const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `${formData.topic || 'script'}_腳本.txt`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
+            const handleDownloadImage = () => {
+                if (!scriptRef.current) return;
+                setIsDownloadingImage(true);
+                window.html2canvas(scriptRef.current, {
+                    scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false,
+                    ignoreElements: (element) => element.classList.contains('print:hidden')
+                }).then(canvas => {
+                    const image = canvas.toDataURL("image/png");
+                    const link = document.createElement('a');
+                    link.href = image;
+                    link.download = `${getActiveData()?.formData?.topic || 'script'}_腳本.png`;
+                    link.click();
+                    setIsDownloadingImage(false);
+                }).catch(err => {
+                    console.error(err); alert("圖片生成失敗"); setIsDownloadingImage(false);
+                });
+            };
+
+            const getActiveData = () => {
+                const client = clients.find(c => c.id === selectedClientId);
+                if (!client) return null;
+                return client.scripts.find(s => s.id === selectedScriptId);
+            };
+
+            const handleGenerateTopics = async () => {
+                const activeScript = getActiveData();
+                if (!activeScript) return;
+                setIsGeneratingTopics(true);
+                setSuggestedTopics([]);
+                if (apiKey && apiKey.length > 20) {
+                    try {
+                        const topics = await callGeminiTopicsAPI(apiKey, activeScript.formData);
+                        setSuggestedTopics(topics);
+                    } catch (error) {
+                        setApiError("主題生成失敗，請檢查 Key。");
+                        setSuggestedTopics(generateMockTopics(activeScript.formData.audience));
+                    }
+                } else {
+                    setTimeout(() => setSuggestedTopics(generateMockTopics(activeScript.formData.audience)), 500);
+                }
+                setIsGeneratingTopics(false);
+            };
+
+            const handleGenerate = async () => {
+                const activeScript = getActiveData();
+                if (!activeScript) return;
+                if (!activeScript.formData.topic) { alert("請先輸入或選擇一個影片主題！"); return; }
+                setIsGenerating(true);
+                setApiError(null);
+                if (apiKey && apiKey.length > 20) {
+                    try {
+                        const result = await callGeminiAPI(apiKey, activeScript.formData);
+                        setClients(prev => prev.map(c => {
+                            if (c.id === selectedClientId) {
+                                const updatedScripts = c.scripts.map(s => {
+                                    if (s.id === selectedScriptId) return { ...s, scriptData: result.script, scriptConcept: result.concept };
+                                    return s;
+                                });
+                                return { ...c, scripts: updatedScripts };
+                            }
+                            return c;
+                        }));
+                    } catch (error) { setApiError("API 連線失敗，請檢查 Key。"); }
+                } else {
+                    setTimeout(() => {
+                        const mock = generateMockData(activeScript.formData.topic);
+                        setClients(prev => prev.map(c => {
+                            if (c.id === selectedClientId) {
+                                const updatedScripts = c.scripts.map(s => {
+                                    if (s.id === selectedScriptId) return { ...s, scriptData: mock.script, scriptConcept: mock.concept };
+                                    return s;
+                                });
+                                return { ...c, scripts: updatedScripts };
+                            }
+                            return c;
+                        }));
+                    }, 500);
+                }
+                setIsGenerating(false);
+            };
+
+            const activeClient = clients.find(c => c.id === selectedClientId);
+            const activeScript = activeClient?.scripts.find(s => s.id === selectedScriptId) || activeClient?.scripts[0];
+
+            // Render
+            return (
+                <div className="flex min-h-screen bg-[#f7f7f5] font-sans">
+                    {/* 左側邊欄 */}
+                    <aside className={`w-64 bg-stone-900 text-stone-300 flex-shrink-0 flex flex-col transition-all duration-300 print:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-64 absolute h-full z-50'}`}>
+                        <div className="p-4 border-b border-stone-800 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white font-serif tracking-widest"><FolderOpen size={18} /><span>CLIENTS</span></div>
+                            <button onClick={handleStartAddClient} className="p-1 hover:bg-stone-800 rounded text-stone-400 hover:text-white"><Plus size={18} /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {isAddingClient && (
+                                <div className="p-2 bg-stone-800 rounded-md mb-2 animate-in slide-in-from-left-2">
+                                    <input autoFocus type="text" value={newClientName} onChange={(e) => setNewClientName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleConfirmAddClient()} className="w-full bg-stone-700 text-white text-sm p-1.5 rounded border border-stone-600 focus:outline-none mb-2" placeholder="輸入客戶名稱..." />
+                                    <div className="flex justify-end gap-2">
+                                        <button onClick={handleCancelAddClient} className="p-1 text-stone-400 hover:text-white"><X size={14}/></button>
+                                        <button onClick={handleConfirmAddClient} className="p-1 text-green-500 hover:text-green-400"><Check size={14}/></button>
+                                    </div>
+                                </div>
+                            )}
+                            {clients.map(client => (
+                                <div key={client.id} onClick={() => setSelectedClientId(client.id)} className={`group flex items-center justify-between p-3 rounded-md cursor-pointer transition-colors ${selectedClientId === client.id ? 'bg-stone-800 text-white' : 'hover:bg-stone-800/50'}`}>
+                                    <div className="flex flex-col gap-1 overflow-hidden w-full">
+                                        <div className="flex items-center gap-3"><User size={14} className={selectedClientId === client.id ? 'text-stone-300' : 'text-stone-600'} /><span className="truncate text-sm font-medium">{client.name}</span></div>
+                                        <div className={`text-[10px] pl-7 ${selectedClientId === client.id ? 'text-stone-400' : 'text-stone-600'}`}>{client.scripts.length} 支腳本</div>
+                                    </div>
+                                    <button onClick={(e) => handleDeleteClient(e, client.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 text-stone-500"><Trash2 size={14} /></button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="p-4 border-t border-stone-800 bg-stone-900">
+                            <button onClick={() => setShowSettings(!showSettings)} className="flex items-center gap-2 text-xs text-stone-500 hover:text-white w-full"><Settings size={14} /><span>設定 API Key</span></button>
+                            {showSettings && (
+                                <div className="mt-3 animate-in slide-in-from-bottom-2">
+                                    <div className="relative"><Key size={12} className="absolute left-2 top-2.5 text-stone-500" /><input type="password" value={apiKey} onChange={handleSaveKey} placeholder="貼上 API Key..." className="w-full bg-stone-800 border border-stone-700 rounded p-2 pl-7 text-xs text-stone-200 focus:outline-none" /></div>
+                                    <div className="text-[10px] text-stone-600 mt-2 flex items-center gap-1"><Save size={10} /> 自動儲存於本機</div>
+                                </div>
+                            )}
+                        </div>
+                    </aside>
+
+                    {/* 右側內容 */}
+                    <main className={`flex-1 flex flex-col h-screen overflow-hidden transition-all duration-300 ${isSidebarOpen ? '' : 'ml-0'}`}>
+                        <header className="h-16 bg-white border-b border-stone-200 flex items-center justify-between px-6 flex-shrink-0 print:hidden">
+                            <div className="flex items-center gap-4">
+                                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 -ml-2 hover:bg-stone-100 rounded text-stone-500"><Scissors size={20} /></button>
+                                <div><h1 className="font-serif font-bold text-lg text-stone-800">{activeClient?.name} 的腳本企劃</h1><div className="text-xs text-stone-400 flex items-center gap-2">{apiKey ? <span className="text-green-600">● AI 連線中</span> : <span>● 模擬模式</span>}</div></div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={handleDownloadText} className="hidden md:flex items-center gap-2 px-3 py-2 bg-stone-100 text-stone-600 text-sm rounded hover:bg-stone-200 shadow-sm"><FileText size={16} /><span className="hidden lg:inline">文字檔</span></button>
+                                <button onClick={handlePrint} className="flex items-center gap-2 px-3 py-2 bg-stone-100 text-stone-600 text-sm rounded hover:bg-stone-200 shadow-sm"><Printer size={16} /><span className="hidden lg:inline">列印 / PDF</span></button>
+                                <button onClick={handleDownloadImage} disabled={isDownloadingImage} className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white text-sm rounded hover:bg-stone-700 shadow-sm">{isDownloadingImage ? <RefreshCcw size={16} className="animate-spin" /> : <ImageIcon size={16} />}<span className="hidden sm:inline">下載圖片</span></button>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 overflow-y-auto bg-[#f7f7f5] print:p-0 print:bg-white print:overflow-visible flex flex-col">
+                            {/* 腳本 Tabs */}
+                            {activeClient && (
+                                <div className="px-6 md:px-10 pt-6 print:hidden">
+                                    <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                                        {activeClient.scripts.map((script, index) => (
+                                            <div key={script.id} onClick={() => handleSwitchScript(script.id)} className={`flex-shrink-0 group relative px-4 py-2 rounded-t-lg border-t border-x cursor-pointer transition-all select-none min-w-[120px] max-w-[200px] ${selectedScriptId === script.id ? 'bg-white border-stone-300 text-stone-800 shadow-sm z-10' : 'bg-stone-100 border-stone-200 text-stone-400 hover:bg-stone-200'}`}>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider mb-0.5 opacity-70">Script #{index + 1}</div>
+                                                <div className="text-xs font-medium truncate pr-4">{script.formData.topic || "未命名腳本"}</div>
+                                                <button onClick={(e) => handleDeleteScript(e, script.id)} className={`absolute right-1 top-2 p-1 rounded-full hover:bg-red-100 hover:text-red-500 ${selectedScriptId === script.id ? 'text-stone-300' : 'text-stone-300 opacity-0 group-hover:opacity-100'}`}><X size={12} /></button>
+                                            </div>
+                                        ))}
+                                        <button onClick={handleAddScript} className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-500 ml-1"><Plus size={16} /></button>
+                                    </div>
+                                    <div className="h-px bg-stone-300 -mt-px relative z-0"></div>
+                                </div>
+                            )}
+
+                            <div className="p-6 md:p-10 pt-4 print:p-0">
+                                {/* 輸入區 */}
+                                {activeScript && (
+                                    <div className="max-w-[297mm] mx-auto mb-8 bg-white p-6 rounded-b-lg rounded-tr-lg shadow-sm border border-t-0 border-stone-200 print:hidden grid grid-cols-1 md:grid-cols-4 gap-6 items-end animate-in fade-in slide-in-from-top-2">
+                                        <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
+                                            <div className="sm:col-span-2">
+                                                <div className="flex items-center justify-between mb-1"><label className="text-xs font-bold text-stone-400 uppercase tracking-wider">主題 Topic</label><button onClick={handleGenerateTopics} disabled={isGeneratingTopics} className="text-[10px] flex items-center gap-1 text-amber-600 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded">{isGeneratingTopics ? <RefreshCcw size={10} className="animate-spin" /> : <Lightbulb size={10} />}{isGeneratingTopics ? '發想中...' : 'AI 靈感'}</button></div>
+                                                <input type="text" value={activeScript.formData.topic} onChange={(e) => handleSelectTopic(e.target.value)} className="w-full border-b border-stone-300 py-2 text-sm focus:outline-none focus:border-stone-800 bg-transparent placeholder-stone-300" placeholder="請輸入主題..." />
+                                                {suggestedTopics.length > 0 && <div className="mt-3 flex flex-wrap gap-2 animate-in fade-in slide-in-from-top-1">{suggestedTopics.map((topic, idx) => <button key={idx} onClick={() => handleSelectTopic(topic)} className="text-xs bg-stone-100 hover:bg-stone-800 hover:text-white text-stone-600 px-3 py-1.5 rounded-full transition-all border border-stone-200 text-left">{topic}</button>)}</div>}
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block mb-1">受眾 Target</label>
+                                                <input type="text" list="audience-list" value={activeScript.formData.audience} onChange={(e) => updateCurrentScriptData('audience', e.target.value)} className="w-full border-b border-stone-300 py-1 text-sm focus:outline-none focus:border-stone-800 bg-transparent placeholder-stone-300" />
+                                                <datalist id="audience-list">{COMMON_AUDIENCES.map((audience, idx) => <option key={idx} value={audience} />)}</datalist>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block mb-1">風格 Style</label>
+                                                <select value={activeScript.formData.style} onChange={(e) => updateCurrentScriptData('style', e.target.value)} className="w-full border-b border-stone-300 py-1 text-sm focus:outline-none focus:border-stone-800 bg-transparent cursor-pointer">{COMMON_STYLES.map((style, idx) => <option key={idx} value={style}>{style}</option>)}</select>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block mb-1">產品/服務</label>
+                                                <input type="text" list="service-list" value={activeScript.formData.product} onChange={(e) => updateCurrentScriptData('product', e.target.value)} className="w-full border-b border-stone-300 py-1 text-sm focus:outline-none focus:border-stone-800 bg-transparent placeholder-stone-300" />
+                                                <datalist id="service-list">{COMMON_SERVICES.map((service, idx) => <option key={idx} value={service} />)}</datalist>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs font-bold text-stone-400 uppercase tracking-wider block mb-1">補充重點</label>
+                                                <input type="text" value={activeScript.formData.notes} onChange={(e) => updateCurrentScriptData('notes', e.target.value)} className="w-full border-b border-stone-300 py-1 text-sm focus:outline-none focus:border-stone-800 bg-transparent placeholder-stone-300" />
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col gap-2">
+                                            <button onClick={handleGenerate} disabled={isGenerating} className="w-full py-3 bg-stone-800 hover:bg-stone-700 text-white text-sm font-medium rounded shadow-lg shadow-stone-200">{isGenerating ? <RefreshCcw className="animate-spin w-4 h-4" /> : <Sparkles className="w-4 h-4 text-amber-300" />} 生成腳本</button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {apiError && <div className="max-w-[297mm] mx-auto mb-4 p-3 bg-red-50 text-red-600 text-xs border border-red-200 rounded flex items-center print:hidden"><AlertCircle size={14} className="mr-2"/> {apiError}</div>}
+
+                                {/* 橫式腳本預覽 (Landscape) */}
+                                {activeScript && (
+                                    <div ref={scriptRef} className="bg-white max-w-[297mm] mx-auto p-[15mm] shadow-lg print:shadow-none print:w-full print:max-w-none print:p-0 print:m-0 flex flex-col animate-in fade-in zoom-in-95 duration-300 capture-target">
+                                        <div className="flex justify-between items-end border-b-2 border-stone-800 pb-4 mb-6">
+                                            <div>
+                                                <h2 className="text-3xl font-serif font-bold text-stone-900">{activeScript.formData.topic || '未命名主題'}</h2>
+                                                <div className="text-xs text-stone-500 mt-2 font-medium flex gap-2">
+                                                    <span className="bg-stone-100 px-2 py-0.5 rounded">Target: {activeScript.formData.audience}</span>
+                                                    {activeScript.formData.product && <span className="bg-stone-100 px-2 py-0.5 rounded">Item: {activeScript.formData.product}</span>}
+                                                    <span className="bg-stone-100 px-2 py-0.5 rounded">Time: {activeScript.formData.duration}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right"><div className="text-xs text-stone-400 uppercase tracking-widest">Hair Script</div><div className="text-xs text-stone-300">{new Date().toLocaleDateString()}</div></div>
+                                        </div>
+
+                                        <div className="flex flex-col gap-6">
+                                            <div className="p-4 bg-stone-50 border border-stone-200 rounded-md">
+                                                <div className="flex items-center gap-2 mb-2 text-stone-600"><FileText size={14} /><span className="text-xs font-bold uppercase tracking-wider">影片概念簡述 (Concept)</span></div>
+                                                <textarea value={activeScript.scriptConcept || ""} onChange={(e) => updateCurrentScriptConcept(e.target.value)} className="w-full bg-transparent text-sm leading-relaxed text-stone-700 font-medium focus:outline-none resize-none" rows={2} placeholder="AI 生成的影片概念..." />
+                                            </div>
+
+                                            <div className="border border-stone-300 flex-1">
+                                                <table className="w-full border-collapse table-fixed">
+                                                    <thead>
+                                                        <tr className="bg-stone-100 text-stone-600">
+                                                            <th className="w-[10%] py-3 border-r border-stone-300 text-xs font-bold text-center">段落</th>
+                                                            <th className="w-[45%] py-3 border-r border-stone-300 text-xs font-bold text-center">大綱重點 (Outline)</th>
+                                                            <th className="w-[45%] py-3 text-xs font-bold text-center">參考語句 (Ref)</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {activeScript.scriptData.map((row) => (
+                                                            <tr key={row.id} className="border-t border-stone-300 group hover:bg-stone-50 transition-colors">
+                                                                <td className="p-2 border-r border-stone-300 text-center align-middle relative">
+                                                                    <input value={row.section} onChange={(e) => updateCurrentScriptContent(row.id, 'section', e.target.value)} className="font-serif text-lg font-bold text-stone-800 w-full text-center bg-transparent focus:outline-none mb-0.5" />
+                                                                    <div className="text-[10px] text-stone-400 uppercase tracking-wider">{row.sectionEn}</div>
+                                                                    <button onClick={() => handleDeleteRow(row.id)} className="absolute left-1 top-1 text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100 print:hidden"><Trash2 size={12} /></button>
+                                                                </td>
+                                                                <td className="p-0 border-r border-stone-300 align-top relative"><textarea value={row.visual} onChange={(e) => updateCurrentScriptContent(row.id, 'visual', e.target.value)} className="w-full h-24 p-3 resize-none focus:outline-none focus:bg-stone-100 text-sm leading-relaxed text-stone-700 bg-transparent" placeholder="輸入重點..." /></td>
+                                                                <td className="p-0 align-top relative"><textarea value={row.dialogue} onChange={(e) => updateCurrentScriptContent(row.id, 'dialogue', e.target.value)} className="w-full h-24 p-3 resize-none focus:outline-none focus:bg-stone-100 text-sm leading-relaxed text-stone-700 font-medium bg-transparent" placeholder="輸入台詞..." /></td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        // 渲染應用程式
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
