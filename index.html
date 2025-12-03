@@ -455,6 +455,9 @@
                 ...s, scriptData: s.scriptData.filter(r => r.id !== rowId)
             }));
 
+            // --- 修正點：加入漏掉的 handleSelectTopic ---
+            const handleSelectTopic = (topic) => updateFormData('topic', topic);
+
             // --- Generation & Download ---
             const getActiveData = () => {
                 const client = clients.find(c => c.id === selectedClientId);
@@ -741,21 +744,21 @@
                                                         {activeScript.scriptData.map((row) => (
                                                             <tr key={row.id} className="border-t-2 border-stone-300 group hover:bg-stone-50 transition-colors">
                                                                 <td className="p-3 border-r-2 border-stone-300 text-center align-middle relative bg-stone-50">
-                                                                    <input value={row.section} onChange={(e) => updateScriptContent(row.id, 'section', e.target.value)} className="font-serif text-2xl font-black text-black w-full text-center bg-transparent focus:outline-none" />
+                                                                    <input value={row.section} onChange={(e) => updateScriptContent(row.id, 'section', e.target.value)} className="font-serif text-lg font-black text-black w-full text-center bg-transparent focus:outline-none" />
                                                                     <button onClick={() => handleDeleteRow(row.id)} className={`absolute left-1 top-1 text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100 ${isCapturing ? 'hidden' : ''} print:hidden`}><Trash2 size={12} /></button>
                                                                 </td>
                                                                 <td className="p-0 border-r-2 border-stone-300 align-top relative">
                                                                     {!isCapturing ? (
-                                                                        <textarea value={row.visual} onChange={(e) => updateScriptContent(row.id, 'visual', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-base leading-relaxed text-black font-medium bg-transparent" placeholder="輸入重點..." />
+                                                                        <textarea value={row.visual} onChange={(e) => updateScriptContent(row.id, 'visual', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-xl leading-relaxed text-black font-medium bg-transparent" placeholder="輸入重點..." />
                                                                     ) : (
-                                                                        <div className="p-4 text-base leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.visual}</div>
+                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.visual}</div>
                                                                     )}
                                                                 </td>
                                                                 <td className="p-0 align-top relative">
                                                                     {!isCapturing ? (
-                                                                        <textarea value={row.dialogue} onChange={(e) => updateScriptContent(row.id, 'dialogue', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-base leading-relaxed text-black font-medium bg-transparent" placeholder="輸入台詞..." />
+                                                                        <textarea value={row.dialogue} onChange={(e) => updateScriptContent(row.id, 'dialogue', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-xl leading-relaxed text-black font-medium bg-transparent" placeholder="輸入台詞..." />
                                                                     ) : (
-                                                                        <div className="p-4 text-base leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.dialogue}</div>
+                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.dialogue}</div>
                                                                     )}
                                                                 </td>
                                                             </tr>
