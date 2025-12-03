@@ -54,9 +54,14 @@
         /* 確保截圖時背景是白的 */
         .capture-target { background-color: white; }
         
-        /* 確保換行正確 */
-        .whitespace-pre-wrap { white-space: pre-wrap; }
-        .break-words { word-break: break-word; overflow-wrap: break-word; }
+        /* 強制換行設定，解決圖片文字跑版問題 */
+        .force-wrap {
+            white-space: pre-wrap;       /* 保留換行符號 */
+            word-wrap: break-word;       /* 長單字自動換行 */
+            overflow-wrap: break-word;   /* 確保不溢出容器 */
+            word-break: break-word;      /* 必要時斷開單字 */
+            max-width: 100%;             /* 限制最大寬度 */
+        }
     </style>
 </head>
 <body class="bg-slate-50 text-black">
@@ -107,7 +112,7 @@
                     <label className="text-sm font-bold text-black uppercase tracking-wider block mb-1 flex items-center">
                         {Icon && <Icon size={14} className="mr-1" />} {label}
                     </label>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 relative">
                         <input 
                             type="text" 
                             list={listId} 
@@ -119,7 +124,7 @@
                         <button 
                             type="button"
                             onClick={() => onAdd(value)}
-                            className="p-2 bg-stone-200 hover:bg-stone-300 hover:text-black rounded text-stone-700 transition-colors flex-shrink-0 cursor-pointer"
+                            className="p-2 bg-stone-200 hover:bg-stone-300 hover:text-black rounded text-stone-700 transition-colors flex-shrink-0 cursor-pointer z-10"
                             title="新增至常用清單"
                         >
                             <Plus size={18} />
@@ -187,15 +192,23 @@
             `;
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // 修正：使用 gemini-2.5-flash-preview-09-2025 版本，這是目前支援的預覽版模型
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
 
                 const data = await response.json();
-                if (data.error) throw new Error(data.error.message || "API 回傳錯誤");
-                if (!data.candidates || !data.candidates[0].content) throw new Error("無內容回傳");
+                
+                // 錯誤處理
+                if (data.error) {
+                    throw new Error(data.error.message || "API 連線錯誤");
+                }
+                
+                if (!data.candidates || !data.candidates[0].content) {
+                    throw new Error("無內容回傳，請檢查 API Key 額度或權限。");
+                }
 
                 let text = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const parsed = JSON.parse(text);
@@ -204,7 +217,6 @@
                 const scriptWithIds = parsed.script.map((item, index) => ({ 
                     ...item, 
                     id: Date.now() + index, 
-                    // 如果 API 回傳的是兩個字，取第一個字，若無則預設
                     section: item.section ? item.section.substring(0, 1) : "段"
                 }));
 
@@ -232,7 +244,8 @@
             `;
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                // 修正：使用 gemini-2.5-flash-preview-09-2025 版本
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
@@ -455,7 +468,7 @@
                 ...s, scriptData: s.scriptData.filter(r => r.id !== rowId)
             }));
 
-            // --- 修正點：加入漏掉的 handleSelectTopic ---
+            // 修正：補上之前漏掉的 handleSelectTopic 定義
             const handleSelectTopic = (topic) => updateFormData('topic', topic);
 
             // --- Generation & Download ---
@@ -475,7 +488,7 @@
                         const topics = await callGeminiTopicsAPI(apiKey, activeScript.formData);
                         setSuggestedTopics(topics);
                     } catch (error) {
-                        setApiError("主題生成失敗，請檢查 Key。");
+                        setApiError(`主題生成失敗: ${error.message}`);
                         setSuggestedTopics(generateMockTopics(activeScript.formData.audience));
                     }
                 } else {
@@ -524,7 +537,7 @@
                 setIsDownloadingImage(true);
                 setIsCapturing(true); // 開啟截圖模式：隱藏 Textarea，顯示 Div
 
-                // 稍微延遲以等待 React 渲染完成
+                // 延遲 300ms 讓 React 渲染完 div，瀏覽器排版完成後再截圖
                 setTimeout(() => {
                     window.html2canvas(scriptRef.current, {
                         scale: 2, 
@@ -548,7 +561,7 @@
                         setIsDownloadingImage(false);
                         setIsCapturing(false);
                     });
-                }, 300); // 給瀏覽器 300ms 進行排版重繪
+                }, 300); 
             };
 
             const handleDownloadText = () => {
@@ -722,11 +735,11 @@
                                             {/* Concept */}
                                             <div className="p-5 bg-stone-100 border-l-4 border-stone-400 rounded-r-md print:border-none print:p-0 print:bg-transparent">
                                                 <div className="flex items-center gap-2 mb-2 text-black"><FileText size={16} /><span className="text-sm font-bold uppercase tracking-wider">影片概念簡述 (Concept)</span></div>
-                                                {/* 根據 isCapturing 切換顯示模式 */}
+                                                {/* 根據 isCapturing 切換顯示模式，解決圖片跑版問題 */}
                                                 {!isCapturing ? (
                                                     <textarea value={activeScript.scriptConcept || ""} onChange={(e) => updateRootField('scriptConcept', e.target.value)} className="w-full bg-transparent text-lg leading-relaxed text-black font-medium focus:outline-none resize-none" rows={2} placeholder="AI 生成的影片概念..." />
                                                 ) : (
-                                                    <div className="text-lg leading-relaxed text-black font-medium whitespace-pre-wrap break-words">{activeScript.scriptConcept}</div>
+                                                    <div className="text-lg leading-relaxed text-black font-medium whitespace-pre-wrap break-words force-wrap">{activeScript.scriptConcept}</div>
                                                 )}
                                             </div>
 
@@ -751,14 +764,14 @@
                                                                     {!isCapturing ? (
                                                                         <textarea value={row.visual} onChange={(e) => updateScriptContent(row.id, 'visual', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-xl leading-relaxed text-black font-medium bg-transparent" placeholder="輸入重點..." />
                                                                     ) : (
-                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.visual}</div>
+                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words force-wrap min-h-[8rem]">{row.visual}</div>
                                                                     )}
                                                                 </td>
                                                                 <td className="p-0 align-top relative">
                                                                     {!isCapturing ? (
                                                                         <textarea value={row.dialogue} onChange={(e) => updateScriptContent(row.id, 'dialogue', e.target.value)} className="w-full h-32 p-4 resize-none focus:outline-none focus:bg-stone-100 text-xl leading-relaxed text-black font-medium bg-transparent" placeholder="輸入台詞..." />
                                                                     ) : (
-                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words min-h-[8rem]">{row.dialogue}</div>
+                                                                        <div className="p-4 text-xl leading-relaxed text-black font-medium whitespace-pre-wrap break-words force-wrap min-h-[8rem]">{row.dialogue}</div>
                                                                     )}
                                                                 </td>
                                                             </tr>
@@ -774,7 +787,7 @@
                                                     {!isCapturing ? (
                                                         <textarea value={activeScript.scriptProps || ""} onChange={(e) => updateRootField('scriptProps', e.target.value)} className="w-full bg-transparent text-base text-black font-medium focus:outline-none resize-none" rows={2} placeholder="需要的道具..." />
                                                     ) : (
-                                                        <div className="text-base text-black font-medium whitespace-pre-wrap break-words">{activeScript.scriptProps}</div>
+                                                        <div className="text-base text-black font-medium whitespace-pre-wrap break-words force-wrap">{activeScript.scriptProps}</div>
                                                     )}
                                                 </div>
                                                 <div>
@@ -782,7 +795,7 @@
                                                     {!isCapturing ? (
                                                         <textarea value={activeScript.scriptModelTips || ""} onChange={(e) => updateRootField('scriptModelTips', e.target.value)} className="w-full bg-transparent text-base text-black font-medium focus:outline-none resize-none" rows={2} placeholder="模特兒條件..." />
                                                     ) : (
-                                                        <div className="text-base text-black font-medium whitespace-pre-wrap break-words">{activeScript.scriptModelTips}</div>
+                                                        <div className="text-base text-black font-medium whitespace-pre-wrap break-words force-wrap">{activeScript.scriptModelTips}</div>
                                                     )}
                                                 </div>
                                             </div>
