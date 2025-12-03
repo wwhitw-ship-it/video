@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ScriptFlow - Hair Stylist Edition</title>
     
+    <!-- 引入 Google Fonts (增加質感) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@700;900&display=swap" rel="stylesheet">
+
     <!-- 1. 引入 Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
@@ -26,45 +31,46 @@
     </script>
 
     <style>
-        /* 字體優化 */
-        body { font-family: "Noto Sans TC", "Microsoft JhengHei", sans-serif; }
+        /* 全局字體設定 */
+        body { font-family: "Noto Sans TC", sans-serif; }
+        .font-serif { font-family: "Noto Serif TC", serif; }
 
         @media print {
             @page { 
                 size: landscape; 
-                margin: 10mm; 
+                margin: 10mm; /* 舒適的留白 */
             }
             body { 
                 background: white; 
-                -webkit-print-color-adjust: exact; 
-                print-color-adjust: exact; 
+                -webkit-print-color-adjust: exact !important; /* 強制列印背景色 */
+                print-color-adjust: exact !important; 
             }
             
+            /* 隱藏操作介面 */
             .print\:hidden { display: none !important; }
+            
+            /* 顯示列印專用內容 */
             .print\:block { display: block !important; }
+            
+            /* 移除不需要的陰影，但保留邊框顏色 */
             .print\:shadow-none { box-shadow: none !important; }
-            .print\:border-none { border: none !important; }
+            
+            /* 強制寬度 */
             .print\:w-full { width: 100% !important; max-width: none !important; }
             
+            /* 確保顏色正確顯示，不被瀏覽器優化掉 */
+            .bg-stone-100 { background-color: #f5f5f4 !important; }
+            .bg-stone-200 { background-color: #e7e5e4 !important; }
+            .bg-stone-50 { background-color: #fafaf9 !important; }
+            .border-stone-300 { border-color: #d6d3d1 !important; }
+            .border-stone-800 { border-color: #292524 !important; }
+
+            /* 分頁控制 */
             .page-break { break-after: page; page-break-after: always; }
-            tr, .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
-            
-            /* 列印樣式微調 */
-            .print\:text-sm { font-size: 0.875rem !important; line-height: 1.25rem !important; }
-            .print\:text-xs { font-size: 0.75rem !important; line-height: 1rem !important; }
-            .print\:p-1 { padding: 0.25rem !important; }
-            .print\:p-2 { padding: 0.5rem !important; }
-            .print\:mb-1 { margin-bottom: 0.25rem !important; }
-            .print\:mb-2 { margin-bottom: 0.5rem !important; }
-            .print\:gap-2 { gap: 0.5rem !important; }
-            .print\:h-auto { height: auto !important; }
-            
-            .force-wrap {
-                white-space: pre-wrap;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-            }
-            
+            tr { break-inside: avoid; page-break-inside: avoid; }
+            .page-break-avoid { break-inside: avoid; page-break-inside: avoid; }
+
+            /* 隱藏捲軸 */
             ::-webkit-scrollbar { display: none; }
         }
         
@@ -79,7 +85,7 @@
         .capture-target { background-color: white; }
     </style>
 </head>
-<body class="bg-slate-50 text-black">
+<body class="bg-slate-50 text-stone-800">
     
     <div id="root"></div>
 
@@ -105,7 +111,7 @@
         const CreatableSelect = ({ label, icon: Icon, value, onChange, onAdd, listId, options }) => {
             return (
                 <div>
-                    <label className="text-sm font-bold text-black uppercase tracking-wider block mb-1 flex items-center">
+                    <label className="text-sm font-bold text-stone-500 uppercase tracking-wider block mb-1 flex items-center">
                         {Icon && <Icon size={14} className="mr-1" />} {label}
                     </label>
                     <div className="flex gap-2 relative">
@@ -117,75 +123,149 @@
             );
         };
 
-        // 元件：腳本紙張
+        // 元件：腳本紙張 (關鍵：實作雙模切換)
         const ScriptPaper = ({ script, isPrinting = false, onChange, onDeleteRow }) => {
             if (!script) return null;
-            const InputComponent = ({ value, onUpdate, className, placeholder, multiline = false, printClassName = "" }) => {
-                if (isPrinting) return <div className={`force-wrap ${className} ${printClassName}`}>{value}</div>;
-                if (multiline) return <textarea value={value || ""} onChange={(e) => onUpdate(e.target.value)} className={`${className} focus:outline-none focus:bg-stone-100 resize-none bg-transparent`} placeholder={placeholder} />;
-                return <input value={value || ""} onChange={(e) => onUpdate(e.target.value)} className={`${className} focus:outline-none focus:border-black bg-transparent`} placeholder={placeholder} />;
+
+            // 核心元件：同時渲染 Input(編輯用) 和 Div(列印用)
+            const InputComponent = ({ value, onUpdate, className, placeholder, multiline = false, center = false }) => {
+                return (
+                    <>
+                        {/* 編輯模式 (print:hidden) */}
+                        {multiline ? (
+                            <textarea 
+                                value={value || ""} 
+                                onChange={(e) => onUpdate(e.target.value)} 
+                                className={`${className} print:hidden focus:outline-none focus:bg-stone-50 resize-none bg-transparent`} 
+                                placeholder={placeholder} 
+                            />
+                        ) : (
+                            <input 
+                                value={value || ""} 
+                                onChange={(e) => onUpdate(e.target.value)} 
+                                className={`${className} print:hidden focus:outline-none focus:bg-stone-50 bg-transparent`} 
+                                placeholder={placeholder} 
+                            />
+                        )}
+
+                        {/* 列印模式 (hidden print:block) - 這是保留樣式的關鍵 */}
+                        {/* 我們移除固定高度 (h-24)，改為 h-auto，讓內容自然撐開，並使用 whitespace-pre-wrap 保留換行 */}
+                        <div className={`hidden print:block whitespace-pre-wrap break-words ${className.replace('h-24', 'h-auto').replace('h-20', 'h-auto')} ${center ? 'text-center' : ''}`} style={{border: 'none', outline: 'none'}}>
+                            {value}
+                        </div>
+                    </>
+                );
             };
 
             return (
                 <div className={`bg-white max-w-[297mm] mx-auto p-[15mm] shadow-lg print:shadow-none print:w-full print:max-w-none print:p-0 print:m-0 flex flex-col ${!isPrinting ? 'animate-in fade-in zoom-in-95 duration-300' : ''}`}>
-                    <div className="flex justify-between items-end border-b-4 border-stone-800 pb-4 mb-4 print:pb-2 print:mb-2 print:border-b-2">
+                    
+                    {/* Header */}
+                    <div className="flex justify-between items-end border-b-4 border-stone-800 pb-4 mb-4 print:pb-2 print:mb-3 print:border-stone-800">
                         <div>
-                            <h2 className="text-4xl font-serif font-black text-black leading-tight print:text-2xl">{script.formData.topic || '未命名主題'}</h2>
-                            <div className="text-xs text-stone-600 mt-2 font-bold flex gap-2 flex-wrap print:mt-1">
-                                <span className="bg-stone-100 px-2 py-0.5 rounded print:bg-transparent print:p-0 print:border print:border-stone-300">Target: {script.formData.audience}</span>
-                                {script.formData.product && <span className="bg-stone-100 px-2 py-0.5 rounded print:bg-transparent print:p-0 print:border print:border-stone-300">Item: {script.formData.product}</span>}
-                                <span className="bg-stone-100 px-2 py-0.5 rounded print:bg-transparent print:p-0 print:border print:border-stone-300">Time: {script.formData.duration}</span>
+                            <h2 className="text-4xl font-serif font-black text-black leading-tight print:text-3xl">{script.formData.topic || '未命名主題'}</h2>
+                            <div className="text-xs text-stone-600 mt-2 font-bold flex gap-2 flex-wrap print:mt-2 print:text-xs">
+                                <span className="bg-stone-100 px-2 py-1 rounded print:border print:border-stone-200 print:bg-stone-50">Target: {script.formData.audience}</span>
+                                {script.formData.product && <span className="bg-stone-100 px-2 py-1 rounded print:border print:border-stone-200 print:bg-stone-50">Item: {script.formData.product}</span>}
+                                <span className="bg-stone-100 px-2 py-1 rounded print:border print:border-stone-200 print:bg-stone-50">Time: {script.formData.duration}</span>
                             </div>
                         </div>
-                        <div className="text-right flex-shrink-0 ml-4"><div className="text-sm font-bold text-stone-400 uppercase tracking-widest print:text-xs">Hair Script</div><div className="text-xs text-stone-400 font-medium">{new Date().toLocaleDateString()}</div></div>
+                        <div className="text-right flex-shrink-0 ml-4">
+                            <div className="text-sm font-bold text-stone-400 uppercase tracking-widest">Hair Script</div>
+                            <div className="text-xs text-stone-400 font-medium">{new Date().toLocaleDateString()}</div>
+                        </div>
                     </div>
 
-                    <div className="flex flex-col gap-4 print:gap-2">
-                        <div className="p-4 bg-stone-100 border-l-4 border-stone-400 rounded-r-md print:border-none print:p-0 print:bg-transparent print:mb-2">
-                            <div className="flex items-center gap-2 mb-1 text-black"><FileText size={14} /><span className="text-xs font-bold uppercase tracking-wider">影片概念簡述 (Concept)</span></div>
-                            <InputComponent multiline value={script.scriptConcept} onUpdate={(v) => onChange('scriptConcept', v)} className="w-full text-lg leading-relaxed text-black font-medium" printClassName="print:text-sm" placeholder="AI 生成的影片概念..." />
+                    <div className="flex flex-col gap-4 print:gap-4">
+                        {/* Concept - 保留背景色 */}
+                        <div className="p-4 bg-stone-100 border-l-4 border-stone-400 rounded-r-md print:bg-stone-100 print:border-stone-400 print:p-3">
+                            <div className="flex items-center gap-2 mb-1 text-stone-700 font-bold"><FileText size={14} /><span className="text-xs uppercase tracking-wider">影片概念簡述 (Concept)</span></div>
+                            <InputComponent 
+                                multiline 
+                                value={script.scriptConcept} 
+                                onUpdate={(v) => onChange('scriptConcept', v)}
+                                className="w-full text-lg leading-relaxed text-stone-800 font-medium print:text-base"
+                                placeholder="AI 生成的影片概念..."
+                            />
                         </div>
-                        <div className="border-2 border-stone-300 flex-1 print:border print:border-black">
+
+                        {/* Table - 保留邊框與背景色 */}
+                        <div className="border-2 border-stone-300 flex-1 print:border-2 print:border-stone-300 rounded-sm overflow-hidden">
                             <table className="w-full border-collapse table-fixed">
                                 <thead>
-                                    <tr className="bg-stone-200 text-black print:bg-stone-100">
-                                        <th className="w-[8%] py-2 border-r-2 border-stone-300 text-sm font-bold text-center print:py-1 print:border-black print:text-xs">段落</th>
-                                        <th className="w-[46%] py-2 border-r-2 border-stone-300 text-sm font-bold text-center print:py-1 print:border-black print:text-xs">大綱重點 (Outline)</th>
-                                        <th className="w-[46%] py-2 text-sm font-bold text-center print:py-1 print:text-xs">參考語句 (Ref)</th>
+                                    <tr className="bg-stone-200 text-stone-800 print:bg-stone-200">
+                                        <th className="w-[10%] py-2 border-r-2 border-stone-300 text-sm font-bold text-center print:border-stone-300">段落</th>
+                                        <th className="w-[45%] py-2 border-r-2 border-stone-300 text-sm font-bold text-center print:border-stone-300">大綱重點 (Outline)</th>
+                                        <th className="w-[45%] py-2 text-sm font-bold text-center">參考語句 (Ref)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {script.scriptData.map((row) => (
-                                        <tr key={row.id} className="border-t-2 border-stone-300 group hover:bg-stone-50 transition-colors print:border-black">
-                                            <td className="p-2 border-r-2 border-stone-300 text-center align-middle relative bg-stone-50 print:border-black print:p-1">
-                                                <InputComponent value={row.section} onUpdate={(v) => onChange('section', v, row.id)} className="font-serif text-lg font-black text-black w-full text-center mb-0.5" printClassName="print:text-base" />
-                                                {!isPrinting && <button onClick={() => onDeleteRow(row.id)} className="absolute left-1 top-1 text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100 print:hidden"><Trash2 size={12} /></button>}
+                                        <tr key={row.id} className="border-t-2 border-stone-300 group hover:bg-stone-50 transition-colors print:border-stone-300">
+                                            <td className="p-2 border-r-2 border-stone-300 text-center align-middle relative bg-stone-50 print:bg-stone-50 print:border-stone-300">
+                                                <InputComponent 
+                                                    value={row.section} 
+                                                    onUpdate={(v) => onChange('section', v, row.id)}
+                                                    className="font-serif text-lg font-black text-black w-full text-center mb-0.5"
+                                                    center
+                                                />
+                                                {!isPrinting && (
+                                                    <button onClick={() => onDeleteRow(row.id)} className="absolute left-1 top-1 text-stone-300 hover:text-red-400 opacity-0 group-hover:opacity-100 print:hidden"><Trash2 size={12} /></button>
+                                                )}
                                             </td>
-                                            <td className="p-0 border-r-2 border-stone-300 align-top relative print:border-black">
-                                                <InputComponent multiline value={row.visual} onUpdate={(v) => onChange('visual', v, row.id)} className="w-full h-24 p-4 text-xl leading-relaxed text-black font-medium" printClassName="print:text-sm print:p-2 print:h-auto" placeholder="輸入重點..." />
+                                            <td className="p-0 border-r-2 border-stone-300 align-top relative print:border-stone-300">
+                                                <InputComponent 
+                                                    multiline
+                                                    value={row.visual}
+                                                    onUpdate={(v) => onChange('visual', v, row.id)}
+                                                    className="w-full h-24 p-4 text-base leading-relaxed text-black font-medium print:p-3 print:text-sm"
+                                                    placeholder="輸入重點..."
+                                                />
                                             </td>
                                             <td className="p-0 align-top relative">
-                                                <InputComponent multiline value={row.dialogue} onUpdate={(v) => onChange('dialogue', v, row.id)} className="w-full h-24 p-4 text-xl leading-relaxed text-black font-medium" printClassName="print:text-sm print:p-2 print:h-auto" placeholder="輸入台詞..." />
+                                                <InputComponent 
+                                                    multiline
+                                                    value={row.dialogue}
+                                                    onUpdate={(v) => onChange('dialogue', v, row.id)}
+                                                    className="w-full h-24 p-4 text-base leading-relaxed text-black font-medium print:p-3 print:text-sm"
+                                                    placeholder="輸入台詞..."
+                                                />
                                             </td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
-                        <div className="grid grid-cols-2 gap-6 mt-1 pt-2 border-t-2 border-stone-200 page-break-avoid print:gap-4 print:pt-1 print:border-t print:border-black">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1 text-black"><Briefcase size={14} /><span className="text-xs font-bold uppercase tracking-wider">拍攝道具 (Props)</span></div>
-                                <InputComponent multiline value={script.scriptProps} onUpdate={(v) => onChange('scriptProps', v)} className="w-full text-base text-black font-medium" printClassName="print:text-sm" placeholder="需要的道具..." />
+
+                        {/* Props & Model Tips - 強制不分頁 */}
+                        <div className="grid grid-cols-2 gap-6 mt-1 pt-2 border-t-2 border-stone-200 page-break-avoid print:border-stone-200">
+                            <div className="p-3 bg-stone-50 rounded border border-stone-200 print:bg-stone-50 print:border-stone-200">
+                                <div className="flex items-center gap-2 mb-2 text-stone-500 font-bold"><Briefcase size={14} /><span className="text-xs uppercase tracking-wider">拍攝道具 (Props)</span></div>
+                                <InputComponent 
+                                    multiline
+                                    value={script.scriptProps}
+                                    onUpdate={(v) => onChange('scriptProps', v)}
+                                    className="w-full text-sm text-stone-800 font-medium"
+                                    placeholder="需要的道具..."
+                                />
                             </div>
-                            <div>
-                                <div className="flex items-center gap-2 mb-1 text-black"><Smile size={14} /><span className="text-xs font-bold uppercase tracking-wider">模特兒提示 (Model)</span></div>
-                                <InputComponent multiline value={script.scriptModelTips} onUpdate={(v) => onChange('scriptModelTips', v)} className="w-full text-base text-black font-medium" printClassName="print:text-sm" placeholder="模特兒條件..." />
+                            <div className="p-3 bg-stone-50 rounded border border-stone-200 print:bg-stone-50 print:border-stone-200">
+                                <div className="flex items-center gap-2 mb-2 text-stone-500 font-bold"><Smile size={14} /><span className="text-xs uppercase tracking-wider">模特兒提示 (Model)</span></div>
+                                <InputComponent 
+                                    multiline
+                                    value={script.scriptModelTips}
+                                    onUpdate={(v) => onChange('scriptModelTips', v)}
+                                    className="w-full text-sm text-stone-800 font-medium"
+                                    placeholder="模特兒條件..."
+                                />
                             </div>
                         </div>
                     </div>
                 </div>
             );
         };
+
+        // ... (Mock Data, API, App logic remains similar but updated for Multi-Select) ...
 
         const generateMockData = (topic) => ({ concept: `以「${topic || '未命名'}」為主題的短片。`, props: "尖尾梳、圓梳、定型液", modelTips: "髮長過肩", script: [{ id: 1, section: "起", visual: "設計師對著鏡頭做出『母湯』手勢。", dialogue: "你是那種洗完頭直接包著毛巾一小時的人嗎？" }, { id: 2, section: "承", visual: "快速示範錯誤 vs 正確吹整。", dialogue: "這樣包只會讓頭皮悶住發臭，髮根還會塌到貼頭皮。" }, { id: 3, section: "轉", visual: "展示吹乾後的蓬鬆髮根。", dialogue: "其實只要洗完立刻逆向吹乾，蓬鬆度直接撐一整天。" }, { id: 4, section: "合", visual: "設計師笑著指下方資訊欄。", dialogue: "想知道你的髮質適合哪種護髮？留言告訴你！" }] });
         const generateMockTopics = (audience) => [`3分鐘快速出門造型`, `顯白髮色推薦 Top3`];
@@ -277,6 +357,8 @@
 
             const toggleSelectionMode = () => { setIsSelectionMode(!isSelectionMode); setSelectedScriptIds(new Set()); };
             const toggleScriptSelection = (scriptId) => { const newSet = new Set(selectedScriptIds); newSet.has(scriptId) ? newSet.delete(scriptId) : newSet.add(scriptId); setSelectedScriptIds(newSet); };
+            
+            // Batch Print (Download PDF) Logic
             const handleBatchPrint = () => { if (selectedScriptIds.size === 0) { alert("請至少選取一支腳本！"); return; } setIsBatchPrinting(true); setTimeout(() => { window.print(); setIsBatchPrinting(false); }, 500); };
             
             const handleDownloadAllPDF = () => {
@@ -288,6 +370,7 @@
                 setTimeout(() => { window.print(); setIsBatchPrinting(false); setSelectedScriptIds(new Set()); }, 500);
             };
 
+            // CSV Export Logic
             const handleBatchCSV = () => {
                 const client = clients.find(c => c.id === selectedClientId);
                 if (!client) return;
@@ -297,13 +380,16 @@
                 if (targetScripts.length === 0) { alert("無腳本"); return; }
                 const escapeCSV = (text) => `"${String(text || "").replace(/"/g, '""')}"`;
                 let csvContent = "\uFEFF";
-                targetScripts.forEach((script, idx) => {
-                    csvContent += `腳本 #${idx + 1},${escapeCSV(script.formData.topic)}\n`;
-                    csvContent += `概念,${escapeCSV(script.scriptConcept)}\n道具,${escapeCSV(script.scriptProps)}\n模特兒,${escapeCSV(script.scriptModelTips)}\n\n`;
-                    csvContent += "段落,畫面,台詞\n";
-                    script.scriptData.forEach(row => csvContent += `${escapeCSV(row.section)},${escapeCSV(row.visual)},${escapeCSV(row.dialogue)}\n`);
-                    csvContent += "\n";
+                // Header
+                csvContent += "腳本主題,影片概念,拍攝道具,模特兒提示,受眾,風格,產品/服務,段落,畫面重點,參考語句\n";
+                
+                targetScripts.forEach((script) => {
+                    const commonInfo = `${escapeCSV(script.formData.topic)},${escapeCSV(script.scriptConcept)},${escapeCSV(script.scriptProps)},${escapeCSV(script.scriptModelTips)},${escapeCSV(script.formData.audience)},${escapeCSV(script.formData.style)},${escapeCSV(script.formData.product)}`;
+                    script.scriptData.forEach(row => {
+                        csvContent += `${commonInfo},${escapeCSV(row.section)},${escapeCSV(row.visual)},${escapeCSV(row.dialogue)}\n`;
+                    });
                 });
+                
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a'); link.href = url; link.download = `scripts_export.csv`; document.body.appendChild(link); link.click(); document.body.removeChild(link);
@@ -399,10 +485,9 @@
                                     <h1 className="font-serif font-bold text-xl text-black flex items-center gap-2">
                                         {activeClient?.name} 的腳本
                                         <button onClick={toggleSelectionMode} className={`ml-3 text-xs px-2 py-1 rounded border flex gap-1 ${isSelectionMode?'bg-indigo-100 text-indigo-700 border-indigo-300':'bg-stone-50 text-stone-500'}`}>{isSelectionMode?<CheckSquare size={14}/>:<Square size={14}/>} 多選</button>
-                                        {/* 下載全集 PDF (紅色按鈕) */}
                                         {activeClient && !isSelectionMode && (
                                             <button onClick={handleDownloadAllPDF} className="ml-2 text-xs bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-2 py-1 rounded flex items-center gap-1 transition-colors shadow-sm">
-                                                <File size={12} /> 下載全集 PDF
+                                                <FileText size={12} /> 下載全集 PDF
                                             </button>
                                         )}
                                         {isSelectionMode && selectedScriptIds.size > 0 && <button onClick={handleBatchPrint} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded flex gap-1"><Printer size={12}/> 下載選取 PDF ({selectedScriptIds.size})</button>}
